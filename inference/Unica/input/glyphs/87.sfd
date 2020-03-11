@@ -1,0 +1,80 @@
+SplineFontDB: 3.2
+FontName: Untitled23
+FullName: Untitled23
+FamilyName: Untitled23
+Weight: Regular
+Copyright: Copyright (c) 2020, Krister Olsson
+UComments: "2020-3-9: Created with FontForge (http://fontforge.org)"
+Version: 001.000
+ItalicAngle: 0
+UnderlinePosition: -100
+UnderlineWidth: 50
+Ascent: 800
+Descent: 200
+InvalidEm: 0
+LayerCount: 2
+Layer: 0 0 "Back" 1
+Layer: 1 0 "Fore" 0
+XUID: [1021 974 -843815378 16645742]
+OS2Version: 0
+OS2_WeightWidthSlopeOnly: 0
+OS2_UseTypoMetrics: 1
+CreationTime: 1583816345
+ModificationTime: 1583816345
+OS2TypoAscent: 0
+OS2TypoAOffset: 1
+OS2TypoDescent: 0
+OS2TypoDOffset: 1
+OS2TypoLinegap: 0
+OS2WinAscent: 0
+OS2WinAOffset: 1
+OS2WinDescent: 0
+OS2WinDOffset: 1
+HheadAscent: 0
+HheadAOffset: 1
+HheadDescent: 0
+HheadDOffset: 1
+OS2Vendor: 'PfEd'
+DEI: 91125
+Encoding: ISO8859-1
+UnicodeInterp: none
+NameList: AGL For New Fonts
+DisplaySize: -48
+AntiAlias: 1
+FitToEm: 0
+BeginChars: 256 1
+
+StartChar: W
+Encoding: 87 87 0
+Width: 936
+Flags: HW
+LayerCount: 2
+Fore
+SplineSet
+608 0 m 1
+ 537 296 l 2
+ 510.333333333 408 487.666666667 512.333333333 469 609 c 1
+ 467 609 l 1
+ 448.333333333 512.333333333 425.666666667 408 399 296 c 2
+ 328 0 l 1
+ 167 0 l 1
+ 10 712 l 1
+ 128 712 l 1
+ 186 438 l 2
+ 212 318 233 211 249 117 c 1
+ 251 117 l 1
+ 275.666666667 234.333333333 299.666666667 341.666666667 323 439 c 2
+ 389 712 l 1
+ 547 712 l 1
+ 613 439 l 2
+ 636.333333333 341.666666667 660.333333333 234.333333333 685 117 c 1
+ 687 117 l 1
+ 701 198.333333333 721.666666667 305.333333333 749 438 c 2
+ 808 712 l 1
+ 926 712 l 1
+ 769 0 l 1
+ 608 0 l 1
+EndSplineSet
+EndChar
+EndChars
+EndSplineFont

@@ -1,0 +1,72 @@
+SplineFontDB: 3.2
+FontName: Untitled24
+FullName: Untitled24
+FamilyName: Untitled24
+Weight: Regular
+Copyright: Copyright (c) 2020, Krister Olsson
+UComments: "2020-3-9: Created with FontForge (http://fontforge.org)"
+Version: 001.000
+ItalicAngle: 0
+UnderlinePosition: -100
+UnderlineWidth: 50
+Ascent: 800
+Descent: 200
+InvalidEm: 0
+LayerCount: 2
+Layer: 0 0 "Back" 1
+Layer: 1 0 "Fore" 0
+XUID: [1021 974 -843815378 16060811]
+OS2Version: 0
+OS2_WeightWidthSlopeOnly: 0
+OS2_UseTypoMetrics: 1
+CreationTime: 1583816345
+ModificationTime: 1583816345
+OS2TypoAscent: 0
+OS2TypoAOffset: 1
+OS2TypoDescent: 0
+OS2TypoDOffset: 1
+OS2TypoLinegap: 0
+OS2WinAscent: 0
+OS2WinAOffset: 1
+OS2WinDescent: 0
+OS2WinDOffset: 1
+HheadAscent: 0
+HheadAOffset: 1
+HheadDescent: 0
+HheadDOffset: 1
+OS2Vendor: 'PfEd'
+DEI: 91125
+Encoding: ISO8859-1
+UnicodeInterp: none
+NameList: AGL For New Fonts
+DisplaySize: -48
+AntiAlias: 1
+FitToEm: 0
+BeginChars: 256 1
+
+StartChar: X
+Encoding: 88 88 0
+Width: 626
+Flags: HW
+LayerCount: 2
+Fore
+SplineSet
+620 0 m 1
+ 480 0 l 1
+ 314 272 l 1
+ 312 272 l 1
+ 146 0 l 1
+ 5 0 l 1
+ 240 364 l 1
+ 17 712 l 1
+ 156 712 l 1
+ 312 451 l 1
+ 314 451 l 1
+ 470 712 l 1
+ 608 712 l 1
+ 386 364 l 1
+ 620 0 l 1
+EndSplineSet
+EndChar
+EndChars
+EndSplineFont

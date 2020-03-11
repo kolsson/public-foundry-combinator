@@ -1,0 +1,79 @@
+SplineFontDB: 3.2
+FontName: Untitled3
+FullName: Untitled3
+FamilyName: Untitled3
+Weight: Regular
+Copyright: Copyright (c) 2020, Krister Olsson
+UComments: "2020-3-9: Created with FontForge (http://fontforge.org)"
+Version: 001.000
+ItalicAngle: 0
+UnderlinePosition: -100
+UnderlineWidth: 50
+Ascent: 800
+Descent: 200
+InvalidEm: 0
+LayerCount: 2
+Layer: 0 0 "Back" 1
+Layer: 1 0 "Fore" 0
+XUID: [1021 974 -843815378 6910834]
+OS2Version: 0
+OS2_WeightWidthSlopeOnly: 0
+OS2_UseTypoMetrics: 1
+CreationTime: 1583816345
+ModificationTime: 1583816345
+OS2TypoAscent: 0
+OS2TypoAOffset: 1
+OS2TypoDescent: 0
+OS2TypoDOffset: 1
+OS2TypoLinegap: 0
+OS2WinAscent: 0
+OS2WinAOffset: 1
+OS2WinDescent: 0
+OS2WinDOffset: 1
+HheadAscent: 0
+HheadAOffset: 1
+HheadDescent: 0
+HheadDOffset: 1
+OS2Vendor: 'PfEd'
+DEI: 91125
+Encoding: ISO8859-1
+UnicodeInterp: none
+NameList: AGL For New Fonts
+DisplaySize: -48
+AntiAlias: 1
+FitToEm: 0
+BeginChars: 256 1
+
+StartChar: C
+Encoding: 67 67 0
+Width: 695
+Flags: HW
+LayerCount: 2
+Fore
+SplineSet
+508.5 694 m 128
+ 551.5 672 584.833333333 641.5 608.5 602.5 c 128
+ 632.166666667 563.5 645.333333333 518.666666667 648 468 c 1
+ 527 468 l 1
+ 521.666666667 515.333333333 504.166666667 552.5 474.5 579.5 c 128
+ 444.833333333 606.5 406.333333333 620 359 620 c 0
+ 298.333333333 620 250.666666667 596.5 216 549.5 c 128
+ 181.333333333 502.5 164 438 164 356 c 256
+ 164 274 181.166666667 209.5 215.5 162.5 c 128
+ 249.833333333 115.5 296.666666667 92 356 92 c 0
+ 403.333333333 92 442.166666667 105.666666667 472.5 133 c 128
+ 502.833333333 160.333333333 521.333333333 198.333333333 528 247 c 1
+ 651 247 l 1
+ 643.666666667 165 614 100.833333333 562 54.5 c 128
+ 510 8.16666666667 441.333333333 -15 356 -15 c 0
+ 291.333333333 -15 235.166666667 0 187.5 30 c 128
+ 139.833333333 60 103.333333333 102.833333333 78 158.5 c 128
+ 52.6666666667 214.166666667 40 280 40 356 c 256
+ 40 432 52.8333333333 497.833333333 78.5 553.5 c 128
+ 104.166666667 609.166666667 141 652 189 682 c 128
+ 237 712 293.666666667 727 359 727 c 0
+ 415.666666667 727 465.5 716 508.5 694 c 128
+EndSplineSet
+EndChar
+EndChars
+EndSplineFont
