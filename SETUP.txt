@@ -7,11 +7,21 @@ If necessary:
 
 # evironment setup
 
-conda create --name public-foundry-combinator python=3.7 pyqt numpy tensorflow=1.15
+conda create --name public-foundry-combinator python=3.7 pyqt numpy tensorflow=1.15 flask lxml
 conda activate public-foundry-combinator
 
+pip install flask_socketio bs4 svgpathtools
 pip install tensor2tensor
+pip install magenta
 
+# OR instead:
 git clone https://github.com/tensorflow/magenta.git && \
 cd magenta/ && \
 pip install -e .
+
+# for the UI
+
+brew install yarn
+
+## to start public-foundry-combinator:    python combinator.py
+## to start public-foundry-combinator-ui: PORT=5858 yarn start

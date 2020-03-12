@@ -1,14 +1,21 @@
-#!/home/krister/anaconda3/envs/public-foundry/bin/python
+#!/Users/krister/anaconda3/envs/public-foundry-combinator/bin/python
 
-import sys, os, tempfile
+import os, tempfile
 from pathlib import Path
 import copy
 import re
+
+import logging
 import warnings
 from pprint import PrettyPrinter
 
-from absl import app
+import absl.app
 from absl import flags
+from flask import Flask, jsonify, request
+from flask_socketio import SocketIO
+from bs4 import BeautifulSoup as soup
+from svgpathtools import parse_path
+
 import numpy as np
 import tensorflow as tf
 
@@ -51,6 +58,27 @@ basepath = Path('.')
 t2tpath = basepath/'t2t'
 
 ##########################################################################################
+# LOGGING
+##########################################################################################
+
+# Suppress Flask's info logging.
+log = logging.getLogger("werkzeug")
+log.setLevel(logging.WARNING)
+
+# shut up and play the hits
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+# warnings.simplefilter("ignore")
+
+##########################################################################################
+# FLASK
+##########################################################################################
+
+# Reference: https://github.com/tensorflow/minigo/blob/master/minigui/serve.py
+
+app = Flask(__name__)
+socketio = SocketIO(app, logger=log, engineio_logger=log)
+
+##########################################################################################
 # TF
 ##########################################################################################
 
@@ -82,10 +110,6 @@ glyphs = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 maxpaths = 50
 
 pp = PrettyPrinter(compact=True)
-
-# shut up and play the hits
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-# warnings.simplefilter("ignore")
 
 ##########################################################################################
 # MODEL
@@ -260,7 +284,8 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir):
     # features1 = preprocess_example(example, hparams) # passed by reference
 
     # OR initialize with example 
-    model, hparams, features1 = initialize_model_with_example(decode_example(example), hparam_set, add_hparams, model_name, ckpt_dir)
+    model, hparams, features1 = initialize_model_with_example(decode_example(example), 
+        hparam_set, add_hparams, model_name, ckpt_dir)
 
     # == the number of glyphs
     num_classes = hparams.num_categories 
@@ -272,7 +297,8 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir):
     # create class batch
     new_features = copy.copy(features1)
 
-    clss_batch = tf.reshape([tf.constant([[clss]], dtype=tf.int64) for clss in range(num_classes)], [-1, 1])
+    clss_batch = tf.reshape([tf.constant([[clss]], dtype=tf.int64) 
+        for clss in range(num_classes)], [-1, 1])
     new_features['targets_cls'] = clss_batch
 
     new_features = _tile(new_features, 'targets_psr', [num_classes, 1, 1])
@@ -432,7 +458,7 @@ def postprocess(svg, dist_thresh=2., skip=False):
     cosa = lambda x, y: (x[0] * y[0] + x[1] * y[1]) / ((np.sqrt(x[0]**2 + x[1]**2) * np.sqrt(y[0]**2 +  y[1]**2)))
     rotate = lambda a, x, y: (x * np.cos(a) - y * np.sin(a), y * np.cos(a) + x * np.sin(a))
 
-    # second,find adjacent bezier curves and, if their control points are almost aligned, 
+    # second, find adjacent bezier curves and, if their control points are almost aligned, 
     # fully align them
 
     for substructure in substructures:
@@ -474,17 +500,18 @@ def postprocess(svg, dist_thresh=2., skip=False):
         curr_pos = new_curr_pos
         new_curr_pos = new_new_curr_pos
   
-    return svg_template.format(' '.join([' '.join(' '.join(cmd) for cmd in s) for s in substructures]))
+    return svg_template.format(' '.join([' '.join(' '.join(cmd) for cmd in s) 
+        for s in substructures]))
 
 ##########################################################################################    
 
-def test_font_glyph_inference(fontname, inputt2tpath):
-    print(f'{bcolors.BOLD}Testing font glyph inference...{bcolors.ENDC}')
+def test_font_glyph_inference(fontname, glyph, inputt2tpath):
+    print(f'{bcolors.BOLD}Testing font glyph inference ({fontname}: {glyph})...{bcolors.ENDC}')
     
     modelbasepath = basepath/'models-google'
     modelsuffix = '_external'
     
-    uni = str(ord('C'))
+    uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
     hparam_set = 'svg_decoder'
@@ -494,7 +521,8 @@ def test_font_glyph_inference(fontname, inputt2tpath):
     model_name = 'svg_decoder'
     ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
 
-    Path('./out-font-glyph-inference.html').write_text('\n'.join(infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir)))
+    Path('./out-font-glyph-inference.html').write_text('\n'.join(infer_from_file(
+        glyphpath, hparam_set, add_hparams, model_name, ckpt_dir)))
 
 def test_svg_inference():
     print(f'{bcolors.BOLD}Testing SVG inference...{bcolors.ENDC}')
@@ -514,26 +542,189 @@ def test_svg_inference():
     model_name = 'svg_decoder'
     ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
 
-    Path('./out-svg-inference.html').write_text('\n'.join(infer(example, hparam_set, add_hparams, model_name, ckpt_dir)))
+    Path('./out-svg-inference.html').write_text('\n'.join(infer(
+        example, hparam_set, add_hparams, model_name, ckpt_dir)))
+
+##########################################################################################    
+
+@app.route('/')
+def index():
+    return "Public Foundry Combinator"
+
+##########################################################################################    
+
+@app.route('/run-tests')
+def run_tests():
+    fontname = FLAGS.font
+
+    inputpath = inferencepath/fontname/'input'
+    inputt2tpath = inputpath/'t2t'
+
+    test_font_glyph_inference(fontname, 'C', inputt2tpath)
+    test_svg_inference()
+    
+    return "Tests Complete"
+
+##########################################################################################    
+
+def clean_and_center_svg(svg, tag='path', flipv=False):
+    # extract the first svg glyph path and bbox
+        
+    svg_tree = soup(svg, 'lxml')
+    svg_tag = svg_tree.find(tag)
+    
+    path_obj = parse_path(svg_tag['d'])
+    xmin, xmax, ymin, ymax = path_obj.bbox()
+    
+    svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    
+    if flipv:
+        svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
+    else:
+        svg_path = f'<path d="{path_obj.d()}" />'    
+    
+    return f'{svg_start_inputs}{svg_path}</svg>'
+
+@app.route('/inputs/<string:fontname>', methods=['GET'])
+def get_inputs(fontname):
+    # sample: 
+    # http://127.0.0.1:5959/inputs/Unica?json=False
+        
+    use_json = request.args.get('json', default='true').lower() == 'true'
+
+    glyphspath = inferencepath/fontname/'input'/'glyphs'
+    glyphpaths = glyphspath.glob('*.sfd')
+
+    print(f'{bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}')
+
+    inputs = {}
+
+    for glyphindex, glyphpath in enumerate(glyphpaths):
+        uni = int(glyphpath.with_suffix('').name)
+
+        # open the glyph to get the paths
+    
+        f = fontforge.open(os.fspath(glyphpath))
+        
+        tempsvgfile = tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False)
+        tempsvgfile.close()
+                
+        f.generate(tempsvgfile.name)
+        
+        svg = Path(tempsvgfile.name).read_text()
+        inputs[chr(uni)] = clean_and_center_svg(svg, tag='glyph', flipv=True)
+        
+        Path(tempsvgfile.name).unlink()
+        f.close()
+    
+    if not use_json:
+        return '\n'.join(inputs.values())
+
+    return jsonify({'inputs': inputs})
+
+@app.route('/infer/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
+def infer_font(modelname, modelsuffix, fontname, glyph):
+    # sample: 
+    # http://127.0.0.1:5959/infer/models-google/external/Unica/A?json=False
+        
+    use_json = request.args.get('json', default='true').lower() == 'true'
+
+    modelbasepath = basepath/modelname
+    modelsuffix = '' if modelsuffix == 0 else f'_{modelsuffix}'
+
+    inputpath = inferencepath/fontname/'input'
+    inputt2tpath = inputpath/'t2t'
+
+    print(f'{bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}')
+
+    uni = str(ord(glyph))
+    glyphpath = inputt2tpath/f'{fontname}-{uni}'
+    
+    hparam_set = 'svg_decoder'
+    vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
+    add_hparams = f'vae_ckpt_dir={vae_ckpt_dir},vae_hparam_set=image_vae'
+                   
+    model_name = 'svg_decoder'
+    ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
+
+    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir)
+    inferences = {}
+    
+    # clean our svg, zip up our inferences with our glyphs
+
+    for i, svg in enumerate(inf):
+        glyph = glyphs[i]
+        inferences[glyph] = clean_and_center_svg(svg)
+        
+    if not use_json:
+        return '\n'.join(inferences.values())
+    
+    return jsonify({'inferences': inferences})
+
+##########################################################################################    
+
+@app.route('/infer/<string:modelname>/<string:modelsuffix>/<string:glyph>', methods=['GET', 'POST'])
+def infer_svg(modelname, modelsuffix, glyph):
+    # sample: 
+    # http://127.0.0.1:5959/infer/models-google/external/U?json=False&svg=%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20width%3D%2250px%22%20height%3D%2250px%22%20style%3D%22-ms-transform%3A%20rotate%28360deg%29%3B%20-webkit-transform%3A%20rotate%28360deg%29%3B%20transform%3A%20rotate%28360deg%29%3B%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22m%209.46800041199%205.86666679382%20l%201.7039999961853027%200.0%20l%200.0%2015.095999717712402%20l%201.656000018119812%200.0%20l%200.0%20-15.095999717712402%20l%201.7039999961853027%200.0%20l%200.0%2016.799999237060547%20l%20-5.064000129699707%200.0%20l%201.1920928955078125e-07%20-16.799999237060547%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E
+    
+    svg = None
+    
+    if request.method == 'POST':
+        if request.json and 'svg' in request.json:
+            svg = request.json['svg']
+    else:
+        svg = request.args.get('svg')
+
+    if not svg:
+        abort(400)
+    
+    use_json = request.args.get('json', default='true').lower() == 'true'
+    
+    modelbasepath = basepath/modelname
+    modelsuffix = '' if modelsuffix == 0 else f'_{modelsuffix}'
+
+    print(f'{bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}')
+
+    uni = ord(glyph)
+    
+    example = generate_t2t_example(uni, svg)
+
+    hparam_set = 'svg_decoder'
+    vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
+    add_hparams = f'vae_ckpt_dir={vae_ckpt_dir},vae_hparam_set=image_vae'
+                   
+    model_name = 'svg_decoder'
+    ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
+
+    inf = infer(example, hparam_set, add_hparams, model_name, ckpt_dir)
+    inferences = {}
+    
+    # clean our svg, zip up our inferences with our glyphs
+
+    for i, svg in enumerate(inf):
+        glyph = glyphs[i]
+        inferences[glyph] = clean_and_center_svg(svg)
+        
+    if not use_json:
+        return '\n'.join(inferences.values())
+    
+    return jsonify({'inferences': inferences})
 
 ##########################################################################################    
 
 def main(_):
-    fontname = FLAGS.font
-
-    # assume we've run generate-font-inference-dataset.poy on each of our 
+    # assume we've run generate-font-inference-dataset.py on each of our 
     # possible inference fonts
     
-    inputpath = inferencepath/fontname/'input'
-    inputt2tpath = inputpath/'t2t'
-    
-    # let's do a simple test    
-    test_font_glyph_inference(fontname, inputt2tpath)
-    test_svg_inference()
+    print('Starting server')
+    socketio.run(app, port=FLAGS.port, host=FLAGS.host)
     
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
-    flags.DEFINE_string('font', 'Unica', 'Font to use for inference.')
-    flags.DEFINE_boolean('debug', False, 'Produces debugging output.')
+    
+    flags.DEFINE_string('font', 'Unica', 'Font to use for test inference.')
+    flags.DEFINE_integer('port', 5959, 'Port to listen on.')
+    flags.DEFINE_string('host', '127.0.0.1', 'The hostname or IP to listen on.')
 
-    app.run(main)
+    absl.app.run(main)
