@@ -7,7 +7,7 @@ If necessary:
 
 # evironment setup
 
-conda create --name public-foundry-combinator python=3.7 pyqt numpy tensorflow=1.15 flask lxml
+conda create --name public-foundry-combinator python=3.7 pyqt numpy tensorflow=1.15 flask flask-cors lxml
 conda activate public-foundry-combinator
 
 pip install flask_socketio bs4 svgpathtools

@@ -12,6 +12,7 @@ from pprint import PrettyPrinter
 import absl.app
 from absl import flags
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from flask_socketio import SocketIO
 from bs4 import BeautifulSoup as soup
 from svgpathtools import parse_path
@@ -76,6 +77,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 # Reference: https://github.com/tensorflow/minigo/blob/master/minigui/serve.py
 
 app = Flask(__name__)
+CORS(app)
 socketio = SocketIO(app, logger=log, engineio_logger=log)
 
 ##########################################################################################
@@ -567,6 +569,16 @@ def run_tests():
 
 ##########################################################################################    
 
+@app.route('/fonts')
+def get_fonts():
+
+    fontdirs = inferencepath.glob('*/')
+    fonts = [f.name for f in fontdirs if f.is_dir()]
+    
+    return jsonify({ 'fonts': fonts })
+
+##########################################################################################    
+
 def clean_and_center_svg(svg, tag='path', flipv=False):
     # extract the first svg glyph path and bbox
         
@@ -595,7 +607,7 @@ def get_inputs(fontname):
     glyphspath = inferencepath/fontname/'input'/'glyphs'
     glyphpaths = glyphspath.glob('*.sfd')
 
-    print(f'{bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}')
+    print(f'{bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}', end='')
 
     inputs = {}
 
@@ -616,7 +628,9 @@ def get_inputs(fontname):
         
         Path(tempsvgfile.name).unlink()
         f.close()
-    
+        
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
+
     if not use_json:
         return '\n'.join(inputs.values())
 
@@ -635,7 +649,7 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
     inputpath = inferencepath/fontname/'input'
     inputt2tpath = inputpath/'t2t'
 
-    print(f'{bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}')
+    print(f'{bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
 
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
@@ -648,6 +662,9 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
     ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
 
     inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir)
+    
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
+    
     inferences = {}
     
     # clean our svg, zip up our inferences with our glyphs
@@ -684,7 +701,7 @@ def infer_svg(modelname, modelsuffix, glyph):
     modelbasepath = basepath/modelname
     modelsuffix = '' if modelsuffix == 0 else f'_{modelsuffix}'
 
-    print(f'{bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}')
+    print(f'{bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
 
     uni = ord(glyph)
     
@@ -699,6 +716,8 @@ def infer_svg(modelname, modelsuffix, glyph):
 
     inf = infer(example, hparam_set, add_hparams, model_name, ckpt_dir)
     inferences = {}
+    
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
     # clean our svg, zip up our inferences with our glyphs
 
