@@ -96,6 +96,8 @@ def _parse_svg(uni, svg):
     path = svg_utils.add_missing_cmds(path, remove_zs=False)
     path = svg_utils.normalize_based_on_viewbox(path, '0 0 {} {}'.format(g['width'], g['vwidth']))
 
+    # add path optimization here
+
     # cleanup
     
     Path(tempsvgfile.name).unlink()
@@ -180,16 +182,17 @@ def generate_t2t_example(uni, svg):
     print(f'{bcolors.BOLD}Generating tfrecord...{bcolors.ENDC}', end = '')
 
     path, width, vwidth = _parse_svg(uni, svg)
+    errorString = None
 
     if _is_valid_glyph(uni, width, vwidth):        
         if len(path) > maxpaths:
             # too many paths!
             
-            print(f'{bcolors.FAIL}{chr(uni)} ({uni}) has too many paths: {len(path)}{bcolors.ENDC}')
+            errorString = f'{chr(uni)} ({uni}) has too many paths: {len(path)}'
         elif len(path) == 0: 
             # no paths!
             
-             print(f'{bcolors.FAIL}{chr(uni)} ({uni}) has no paths{bcolors.ENDC}')
+             errorString = f'{chr(uni)} ({uni}) has no paths'
         else:
             # super clunky but we have to get our example in the right format
             
@@ -210,11 +213,12 @@ def generate_t2t_example(uni, svg):
             Path(tempexamplefile.name).unlink() # delete for real
             
             print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
-            return example
+            return { 'error': None, 'example': example }
     else:
-        print(f'{bcolors.FAIL}{chr(uni)} ({uni}) is invalid{bcolors.ENDC}')
+        errorString = f'{chr(uni)} ({uni}) is invalid'
         
-    return False            
+    print(f'{bcolors.FAIL}{errorString}{bcolors.ENDC}')
+    return { 'error': errorString, 'example': None }
    
 ##########################################################################################    
 
@@ -227,10 +231,10 @@ def main(_):
     uni = ord(glyph)
         
     # generate our t2t example
-    example = generate_t2t_example(uni, svg)
+    result = generate_t2t_example(uni, svg)
     
-    if FLAGS.debug and example: 
-        pp.pprint(example)
+    if FLAGS.debug: 
+        pp.pprint(result)
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS

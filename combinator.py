@@ -11,7 +11,7 @@ from pprint import PrettyPrinter
 
 import absl.app
 from absl import flags
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from bs4 import BeautifulSoup as soup
@@ -694,7 +694,7 @@ def infer_svg(modelname, modelsuffix, glyph):
         svg = request.args.get('svg')
 
     if not svg:
-        abort(400)
+        return jsonify({ 'error': "Request must include 'svg'" })
     
     use_json = request.args.get('json', default='true').lower() == 'true'
     
@@ -705,7 +705,15 @@ def infer_svg(modelname, modelsuffix, glyph):
 
     uni = ord(glyph)
     
-    example = generate_t2t_example(uni, svg)
+    result = generate_t2t_example(uni, svg)
+    
+    if result['error']:
+        return jsonify({ 'error': result['error'] })
+    
+    if not result['example']:
+        return jsonify({ 'error': "'generate_t2t_example' could not produce an example" })
+        
+    example = result['example']
 
     hparam_set = 'svg_decoder'
     vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
