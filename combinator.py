@@ -549,27 +549,27 @@ def test_svg_inference():
 
 ##########################################################################################    
 
-@app.route('/')
+@app.route('/api')
 def index():
     return "Public Foundry Combinator"
 
 ##########################################################################################    
 
-@app.route('/run-tests')
-def run_tests():
-    fontname = FLAGS.font
-
-    inputpath = inferencepath/fontname/'input'
-    inputt2tpath = inputpath/'t2t'
-
-    test_font_glyph_inference(fontname, 'C', inputt2tpath)
-    test_svg_inference()
-    
-    return "Tests Complete"
+# @app.route('/run-tests')
+# def run_tests():
+#     fontname = FLAGS.font
+# 
+#     inputpath = inferencepath/fontname/'input'
+#     inputt2tpath = inputpath/'t2t'
+# 
+#     test_font_glyph_inference(fontname, 'C', inputt2tpath)
+#     test_svg_inference()
+#     
+#     return "Tests Complete"
 
 ##########################################################################################    
 
-@app.route('/fonts')
+@app.route('/api/fonts')
 def get_fonts():
 
     fontdirs = inferencepath.glob('*/')
@@ -597,10 +597,10 @@ def clean_and_center_svg(svg, tag='path', flipv=False):
     
     return f'{svg_start_inputs}{svg_path}</svg>'
 
-@app.route('/inputs/<string:fontname>', methods=['GET'])
+@app.route('/api/inputs/<string:fontname>', methods=['GET'])
 def get_inputs(fontname):
     # sample: 
-    # http://127.0.0.1:5959/inputs/Unica?json=False
+    # http://127.0.0.1:5959/api/inputs/Unica?json=False
         
     use_json = request.args.get('json', default='true').lower() == 'true'
 
@@ -636,10 +636,10 @@ def get_inputs(fontname):
 
     return jsonify({'inputs': inputs})
 
-@app.route('/infer/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
+@app.route('/api/infer/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
 def infer_font(modelname, modelsuffix, fontname, glyph):
     # sample: 
-    # http://127.0.0.1:5959/infer/models-google/external/Unica/A?json=False
+    # http://127.0.0.1:5959/api/infer/models-google/external/Unica/A?json=False
         
     use_json = request.args.get('json', default='true').lower() == 'true'
 
@@ -680,10 +680,10 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
 
 ##########################################################################################    
 
-@app.route('/infer/<string:modelname>/<string:modelsuffix>/<string:glyph>', methods=['GET', 'POST'])
+@app.route('/api/infer/<string:modelname>/<string:modelsuffix>/<string:glyph>', methods=['GET', 'POST'])
 def infer_svg(modelname, modelsuffix, glyph):
     # sample: 
-    # http://127.0.0.1:5959/infer/models-google/external/U?json=False&svg=%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20width%3D%2250px%22%20height%3D%2250px%22%20style%3D%22-ms-transform%3A%20rotate%28360deg%29%3B%20-webkit-transform%3A%20rotate%28360deg%29%3B%20transform%3A%20rotate%28360deg%29%3B%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22m%209.46800041199%205.86666679382%20l%201.7039999961853027%200.0%20l%200.0%2015.095999717712402%20l%201.656000018119812%200.0%20l%200.0%20-15.095999717712402%20l%201.7039999961853027%200.0%20l%200.0%2016.799999237060547%20l%20-5.064000129699707%200.0%20l%201.1920928955078125e-07%20-16.799999237060547%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E
+    # http://127.0.0.1:5959/api/infer/models-google/external/U?json=False&svg=%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20width%3D%2250px%22%20height%3D%2250px%22%20style%3D%22-ms-transform%3A%20rotate%28360deg%29%3B%20-webkit-transform%3A%20rotate%28360deg%29%3B%20transform%3A%20rotate%28360deg%29%3B%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22m%209.46800041199%205.86666679382%20l%201.7039999961853027%200.0%20l%200.0%2015.095999717712402%20l%201.656000018119812%200.0%20l%200.0%20-15.095999717712402%20l%201.7039999961853027%200.0%20l%200.0%2016.799999237060547%20l%20-5.064000129699707%200.0%20l%201.1920928955078125e-07%20-16.799999237060547%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E
     
     svg = None
     
