@@ -752,6 +752,6 @@ if __name__ == '__main__':
     
     flags.DEFINE_string('font', 'Unica', 'Font to use for test inference.')
     flags.DEFINE_integer('port', 5959, 'Port to listen on.')
-    flags.DEFINE_string('host', '127.0.0.1', 'The hostname or IP to listen on.')
+    flags.DEFINE_string('host', '0.0.0.0', 'The hostname or IP to listen on.')
 
     absl.app.run(main)
