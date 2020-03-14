@@ -1,3 +1,11 @@
+******************************************************************************************
+MACOS
+******************************************************************************************
+
+# -------------------------------
+# public-foundry-combinator setup
+# -------------------------------
+
 # homebrew setup
 
 brew install libagg pkg-config fontforge
@@ -19,9 +27,73 @@ git clone https://github.com/tensorflow/magenta.git && \
 cd magenta/ && \
 pip install -e .
 
-# for the UI
+# ----------------------------------
+# public-foundry-combinator-ui setup
+# ----------------------------------
 
 brew install yarn
 
+# -------------------
+# development servers
+# -------------------
+
 ## to start public-foundry-combinator:    python combinator.py
 ## to start public-foundry-combinator-ui: PORT=5858 yarn start
+
+
+
+******************************************************************************************
+UBUNTU
+******************************************************************************************
+
+# -----------------------
+# Storing git credentials
+# -----------------------
+
+Run
+
+git config --global credential.helper store
+then
+
+git pull
+provide a username and password and those details will then be remembered later. 
+The credentials are stored in a file on the disk, with the disk permissions of "just 
+user readable/writable" but still in plaintext.
+
+If you want to change the password later
+
+git pull
+Will fail, because the password is incorrect, git then removes the offending 
+user+password from the ~/.git-credentials file, so now re-run
+
+git pull
+to provide a new password so it works as earlier.
+
+# -------------------------------
+# public-foundry-combinator setup
+# -------------------------------
+
+# evironment setup
+
+conda create --name public-foundry-combinator python=3.7 pyqt numpy tensorflow-gpu=1.15 flask flask-cors lxml
+conda activate public-foundry-combinator
+
+pip install flask_socketio bs4 svgpathtools
+pip install tensor2tensor
+pip install magenta
+
+# ----------------------------------
+# public-foundry-combinator-ui setup
+# ----------------------------------
+
+# install yarn
+
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+sudo apt update && sudo apt install yarn
+
+# -------------------
+# development servers
+# -------------------
+
+## to start public-foundry-combinator:    python combinator.py --host 0.0.0.0

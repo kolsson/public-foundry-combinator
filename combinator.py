@@ -644,7 +644,7 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
     use_json = request.args.get('json', default='true').lower() == 'true'
 
     modelbasepath = basepath/modelname
-    modelsuffix = '' if modelsuffix == 0 else f'_{modelsuffix}'
+    modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
 
     inputpath = inferencepath/fontname/'input'
     inputt2tpath = inputpath/'t2t'
@@ -699,7 +699,7 @@ def infer_svg(modelname, modelsuffix, glyph):
     use_json = request.args.get('json', default='true').lower() == 'true'
     
     modelbasepath = basepath/modelname
-    modelsuffix = '' if modelsuffix == 0 else f'_{modelsuffix}'
+    modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
 
     print(f'{bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
 
