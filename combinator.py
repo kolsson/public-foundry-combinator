@@ -1,6 +1,6 @@
 #!/Users/krister/anaconda3/envs/public-foundry-combinator/bin/python
 
-import os, tempfile
+import os, tempfile, datetime
 from pathlib import Path
 import copy
 import re
@@ -607,7 +607,7 @@ def get_inputs(fontname):
     glyphspath = inferencepath/fontname/'input'/'glyphs'
     glyphpaths = glyphspath.glob('*.sfd')
 
-    print(f'{bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}', end='')
 
     inputs = {}
 
@@ -649,11 +649,11 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
     inputpath = inferencepath/fontname/'input'
     inputt2tpath = inputpath/'t2t'
 
-    print(f'{bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
-
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+   
     hparam_set = 'svg_decoder'
     vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
     add_hparams = f'vae_ckpt_dir={vae_ckpt_dir},vae_hparam_set=image_vae'
@@ -701,18 +701,17 @@ def infer_svg(modelname, modelsuffix, glyph):
     modelbasepath = basepath/modelname
     modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
 
-    print(f'{bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
-
     uni = ord(glyph)
-    
+    print(f'{datetime.datetime.now()}: ', end='')
     result = generate_t2t_example(uni, svg)
-    
+        
     if result['error']:
         return jsonify({ 'error': result['error'] })
     
     if not result['example']:
         return jsonify({ 'error': "'generate_t2t_example' could not produce an example" })
         
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
     example = result['example']
 
     hparam_set = 'svg_decoder'
@@ -744,7 +743,7 @@ def main(_):
     # assume we've run generate-font-inference-dataset.py on each of our 
     # possible inference fonts
     
-    print('Starting server')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}Starting server{bcolors.ENDC}')
     socketio.run(app, port=FLAGS.port, host=FLAGS.host)
     
 if __name__ == '__main__':
