@@ -4,6 +4,7 @@ import os, tempfile, datetime
 from pathlib import Path
 import copy
 import re
+import base64
 
 import logging
 import warnings
@@ -18,6 +19,7 @@ from bs4 import BeautifulSoup as soup
 from svgpathtools import parse_path
 
 import numpy as np
+from matplotlib.pyplot import imsave
 import tensorflow as tf
 
 from tensor2tensor.data_generators import generator_utils
@@ -178,7 +180,7 @@ def get_bottleneck(features, model):
 
     return model(features)[0]
 
-def infer_from_bottleneck(features, bottleneck, model):
+def infer_from_bottleneck(features, bottleneck, model, out='svg'):
     """Returns a sample from a decoder, conditioned on the given a latent."""
     features = features.copy()
 
@@ -196,7 +198,10 @@ def infer_from_bottleneck(features, bottleneck, model):
     features['targets_psr'] = tf.zeros(
         batch_size + tf.shape(features['targets_psr'])[1:].numpy().tolist())
 
-    return model.infer(features, decode_length=0)
+    if out == 'svg':
+        return model.infer(features, decode_length=0)
+    else:
+        return model(features)
 
 ##########################################################################################
 # INFERENCE
@@ -267,7 +272,7 @@ def preprocess_example(example, hparams):
     # we pass by reference so example is modified even if we don't return
     return example    
 
-def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir):
+def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
     """ Load, decode and infer our example """
     
     # https://www.tensorflow.org/tutorials/load_data/tfrecord
@@ -276,9 +281,9 @@ def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir)
     for raw_record in raw_dataset.take(1):
         example = raw_record # we decode_example in infer()
 
-    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir)
+    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out)
 
-def infer(example, hparam_set, add_hparams, model_name, ckpt_dir):
+def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
     """Decodes one example of each class, conditioned on the example."""
 
     # initialize with t2t data
@@ -305,23 +310,53 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir):
 
     new_features = _tile(new_features, 'targets_psr', [num_classes, 1, 1])
 
-    inp_target_dim = [num_classes, 1, 1, 1]
+    inp_target_dim = [num_classes, 1, 1, 1] if out == 'svg' else [num_classes, 1]
 
     new_features = _tile(new_features, 'inputs', inp_target_dim)
     new_features = _tile(new_features, 'targets', inp_target_dim)
 
     # run model
-    output_batch = infer_from_bottleneck(new_features, bottleneck1, model)
+    output_batch = infer_from_bottleneck(new_features, bottleneck1, model, out)
 
     # render outputs to svg
     # (our inference example is features1['inputs'])
-    output_batch = output_batch['outputs']
+    output_batch = output_batch['outputs'] if out == 'svg' else output_batch[0]
 
-    svg_list = []    
+    out_list = []    
     for output in tf.split(output_batch, num_classes):
-        svg_list.append(svg_render(output))
+        if out == 'svg':
+            out_list.append(svg_render(output))
+        else:
+            out_list.append(bitmap_render(output))
 
-    return svg_list
+    return out_list
+
+##########################################################################################
+# Bitmap
+##########################################################################################
+
+def bitmap_render(tensor):
+    """Converts Image VAE output into HTML svg."""
+    # create a temporary file
+    
+    tempbitmapfile = tempfile.NamedTemporaryFile(mode='w', suffix='.png', delete=False)
+    tempbitmapfile.close()
+    tempbitmappath = Path(tempbitmapfile.name)
+
+    # save our image
+
+    imsave(tempbitmappath, np.reshape(tensor, [64, 64]), vmin=0, vmax=1, cmap='gray_r')
+    
+    # load back and convert to html
+    
+    data_uri = base64.b64encode(tempbitmappath.read_bytes()).decode('utf-8')
+    html = '<img src="data:image/png;base64,{0}">'.format(data_uri)
+    
+    # remove our temporary file
+    
+    tempbitmappath.unlink()
+
+    return html
 
 ##########################################################################################
 # SVG
@@ -569,16 +604,6 @@ def index():
 
 ##########################################################################################    
 
-@app.route('/api/fonts')
-def get_fonts():
-
-    fontdirs = inferencepath.glob('*/')
-    fonts = [f.name for f in fontdirs if f.is_dir()]
-    
-    return jsonify({ 'fonts': fonts })
-
-##########################################################################################    
-
 def clean_and_center_svg(svg, tag='path', flipv=False):
     # extract the first svg glyph path and bbox
         
@@ -596,6 +621,18 @@ def clean_and_center_svg(svg, tag='path', flipv=False):
         svg_path = f'<path d="{path_obj.d()}" />'    
     
     return f'{svg_start_inputs}{svg_path}</svg>'
+
+##########################################################################################    
+
+@app.route('/api/fonts')
+def get_fonts():
+
+    fontdirs = inferencepath.glob('*/')
+    fonts = [f.name for f in fontdirs if f.is_dir()]
+    
+    return jsonify({ 'fonts': fonts })
+
+##########################################################################################    
 
 @app.route('/api/inputs/<string:fontname>', methods=['GET'])
 def get_inputs(fontname):
@@ -636,10 +673,12 @@ def get_inputs(fontname):
 
     return jsonify({'inputs': inputs})
 
-@app.route('/api/infer/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
-def infer_font(modelname, modelsuffix, fontname, glyph):
+##########################################################################################    
+
+@app.route('/api/infer/bitmap/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
+def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     # sample: 
-    # http://127.0.0.1:5959/api/infer/models-google/external/Unica/A?json=False
+    # http://127.0.0.1:5959/api/infer/bitmap/models-google/external/Unica/A?json=False
         
     use_json = request.args.get('json', default='true').lower() == 'true'
 
@@ -652,7 +691,50 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+   
+    hparam_set = 'image_vae'
+    add_hparams = ''
+                   
+    model_name = 'image_vae'
+    ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
+
+    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="bitmap")
+    
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
+    
+    inferences = {}
+    
+    # clean our svg, zip up our inferences with our glyphs
+
+    for i, bitmap in enumerate(inf):
+        glyph = glyphs[i]
+        inferences[glyph] = bitmap
+        
+    if not use_json:
+        return '\n'.join(inferences.values())
+    
+    return jsonify({'inferences': inferences})
+
+##########################################################################################    
+
+@app.route('/api/infer/svg/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
+def infer_svg_from_font(modelname, modelsuffix, fontname, glyph):
+    # sample: 
+    # http://127.0.0.1:5959/api/infer/svg/models-google/external/Unica/A?json=False
+        
+    use_json = request.args.get('json', default='true').lower() == 'true'
+
+    modelbasepath = basepath/modelname
+    modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
+
+    inputpath = inferencepath/fontname/'input'
+    inputt2tpath = inputpath/'t2t'
+
+    uni = str(ord(glyph))
+    glyphpath = inputt2tpath/f'{fontname}-{uni}'
+    
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
    
     hparam_set = 'svg_decoder'
     vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
@@ -680,10 +762,10 @@ def infer_font(modelname, modelsuffix, fontname, glyph):
 
 ##########################################################################################    
 
-@app.route('/api/infer/<string:modelname>/<string:modelsuffix>/<string:glyph>', methods=['GET', 'POST'])
-def infer_svg(modelname, modelsuffix, glyph):
+@app.route('/api/infer/svg/<string:modelname>/<string:modelsuffix>/<string:glyph>', methods=['GET', 'POST'])
+def infer_svg_from_svg(modelname, modelsuffix, glyph):
     # sample: 
-    # http://127.0.0.1:5959/api/infer/models-google/external/U?json=False&svg=%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20width%3D%2250px%22%20height%3D%2250px%22%20style%3D%22-ms-transform%3A%20rotate%28360deg%29%3B%20-webkit-transform%3A%20rotate%28360deg%29%3B%20transform%3A%20rotate%28360deg%29%3B%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22m%209.46800041199%205.86666679382%20l%201.7039999961853027%200.0%20l%200.0%2015.095999717712402%20l%201.656000018119812%200.0%20l%200.0%20-15.095999717712402%20l%201.7039999961853027%200.0%20l%200.0%2016.799999237060547%20l%20-5.064000129699707%200.0%20l%201.1920928955078125e-07%20-16.799999237060547%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E
+    # http://127.0.0.1:5959/api/infer/svg/models-google/external/U?json=False&svg=%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20xmlns%3Axlink%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxlink%22%20width%3D%2250px%22%20height%3D%2250px%22%20style%3D%22-ms-transform%3A%20rotate%28360deg%29%3B%20-webkit-transform%3A%20rotate%28360deg%29%3B%20transform%3A%20rotate%28360deg%29%3B%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22m%209.46800041199%205.86666679382%20l%201.7039999961853027%200.0%20l%200.0%2015.095999717712402%20l%201.656000018119812%200.0%20l%200.0%20-15.095999717712402%20l%201.7039999961853027%200.0%20l%200.0%2016.799999237060547%20l%20-5.064000129699707%200.0%20l%201.1920928955078125e-07%20-16.799999237060547%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fsvg%3E
     
     svg = None
     
@@ -711,7 +793,7 @@ def infer_svg(modelname, modelsuffix, glyph):
     if not result['example']:
         return jsonify({ 'error': "'generate_t2t_example' could not produce an example" })
         
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
     example = result['example']
 
     hparam_set = 'svg_decoder'
