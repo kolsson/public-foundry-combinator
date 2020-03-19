@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup as soup
 from svgpathtools import parse_path
 
 import numpy as np
-from matplotlib.pyplot import imsave
+import PIL.PngImagePlugin
 import tensorflow as tf
 
 from tensor2tensor.data_generators import generator_utils
@@ -343,10 +343,16 @@ def bitmap_render(tensor):
     tempbitmapfile.close()
     tempbitmappath = Path(tempbitmapfile.name)
 
-    # save our image
+    # save our image -- snipped from matplotlib
+    # imsave(tempbitmappath, np.reshape(tensor, [64, 64]), vmin=0, vmax=1, cmap='gray_r')
 
-    imsave(tempbitmappath, np.reshape(tensor, [64, 64]), vmin=0, vmax=1, cmap='gray_r')
-    
+    arr = np.reshape(tensor, [64, 64])
+    arr = np.clip(arr, 0, 1)
+    arr = 255 - ((arr * 255).round().astype(np.uint8))
+ 
+    image = PIL.Image.fromarray(arr, "L")    
+    image.save(tempbitmappath, format="png")
+        
     # load back and convert to html
     
     data_uri = base64.b64encode(tempbitmappath.read_bytes()).decode('utf-8')
