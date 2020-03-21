@@ -272,7 +272,7 @@ def preprocess_example(example, hparams):
     # we pass by reference so example is modified even if we don't return
     return example    
 
-def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
+def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8):
     """ Load, decode and infer our example """
     
     # https://www.tensorflow.org/tutorials/load_data/tfrecord
@@ -281,9 +281,9 @@ def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir,
     for raw_record in raw_dataset.take(1):
         example = raw_record # we decode_example in infer()
 
-    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out)
+    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out, bitmap_depth)
 
-def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
+def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8):
     """Decodes one example of each class, conditioned on the example."""
 
     # initialize with t2t data
@@ -327,7 +327,7 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
         if out == 'svg':
             out_list.append(svg_render(output))
         else:
-            out_list.append(bitmap_render(output))
+            out_list.append(bitmap_render(output, bitmap_depth))
 
     return out_list
 
@@ -335,7 +335,7 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg'):
 # Bitmap
 ##########################################################################################
 
-def bitmap_render(tensor):
+def bitmap_render(tensor, depth=8, adj_val=0.33):
     """Converts Image VAE output into HTML svg."""
     # create a temporary file
     
@@ -343,14 +343,20 @@ def bitmap_render(tensor):
     tempbitmapfile.close()
     tempbitmappath = Path(tempbitmapfile.name)
 
-    # save our image -- snipped from matplotlib
+    # save our image -- adapted from matplotlib code below:
     # imsave(tempbitmappath, np.reshape(tensor, [64, 64]), vmin=0, vmax=1, cmap='gray_r')
 
     arr = np.reshape(tensor, [64, 64])
     arr = np.clip(arr, 0, 1)
+    if depth == 1:
+        # apply adj_scalar then convert to 1 bit
+        arr = arr + adj_val
+        arr = np.around(arr)
+        
     arr = 255 - ((arr * 255).round().astype(np.uint8))
  
-    image = PIL.Image.fromarray(arr, "L")    
+    image = PIL.Image.fromarray(arr, "L")
+    
     image.save(tempbitmappath, format="png")
         
     # load back and convert to html
@@ -687,6 +693,7 @@ def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     # http://127.0.0.1:5959/api/infer/bitmap/models-google/external/Unica/A?json=False
         
     use_json = request.args.get('json', default='true').lower() == 'true'
+    bitmap_depth = int(request.args.get('depth', default='8'))
 
     modelbasepath = basepath/modelname
     modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
@@ -697,7 +704,7 @@ def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_depth: {bitmap_depth}-bit)...{bcolors.ENDC}', end='')
    
     hparam_set = 'image_vae'
     add_hparams = ''
@@ -705,7 +712,7 @@ def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     model_name = 'image_vae'
     ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
 
-    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="bitmap")
+    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="bitmap", bitmap_depth=bitmap_depth)
     
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
@@ -740,7 +747,7 @@ def infer_svg_from_font(modelname, modelsuffix, fontname, glyph):
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json})...{bcolors.ENDC}', end='')
    
     hparam_set = 'svg_decoder'
     vae_ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
@@ -799,7 +806,7 @@ def infer_svg_from_svg(modelname, modelsuffix, glyph):
     if not result['example']:
         return jsonify({ 'error': "'generate_t2t_example' could not produce an example" })
         
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use JSON: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/SVG glyph inference "{glyph}" using {modelname}{modelsuffix} (use_json: {use_json})...{bcolors.ENDC}', end='')
     example = result['example']
 
     hparam_set = 'svg_decoder'
