@@ -477,7 +477,7 @@ def get_svg_path_ymin_ymax(svg, ymin=None, ymax=None, tag='path'):
         
     svg_tree = soup(svg, 'lxml')
     svg_tag = svg_tree.find(tag)
-    
+    print("TEST", svg_tag)
     path_obj = parse_path(svg_tag['d'])
     xmin, xmax, nymin, nymax = path_obj.bbox()
     
@@ -884,7 +884,7 @@ def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
         f.generate(tempsvgfile.name)
         f.close()
     
-        # read svg back in, clean and center
+        # read svg
     
         svg = tempsvgpath.read_text()
         
