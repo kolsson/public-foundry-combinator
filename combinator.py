@@ -8,7 +8,6 @@ import base64
 
 import logging
 import warnings
-from pprint import PrettyPrinter
 
 import absl.app
 from absl import flags
@@ -20,6 +19,9 @@ from svgpathtools import parse_path
 
 import numpy as np
 import PIL.PngImagePlugin
+import PIL.ImageOps  
+import PIL.ImageEnhance
+from PIL import ImageDraw
 import tensorflow as tf
 
 from tensor2tensor.data_generators import generator_utils
@@ -111,9 +113,36 @@ with tf.io.gfile.GFile(os.fspath(t2tpath/'stdev.npz'), 'rb') as f: stdev_npz = n
 # order used internally
 glyphs = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+# probably useless -- we need a more intelligent way of producing filled glyphs
+glyphMaxVoids = {
+    '0': 1,
+    '4': 1,
+    '6': 1,
+    '8': 2,
+    '9': 1,
+    'A': 1,
+    'B': 1,
+    'D': 1,
+    'O': 1,
+    'P': 1,
+    'Q': 1,
+    'R': 1,
+    'a': 1,
+    'b': 1,
+    'd': 1,
+    'e': 1,
+    'g': 1,
+    'o': 1,
+    'p': 1,
+    'q': 1,
+}
+
 maxpaths = 50
 
-pp = PrettyPrinter(compact=True)
+# borrowed from glyphtracer
+
+font_ascent = 1000
+font_height = 780
 
 ##########################################################################################
 # MODEL
@@ -272,7 +301,7 @@ def preprocess_example(example, hparams):
     # we pass by reference so example is modified even if we don't return
     return example    
 
-def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8):
+def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_fill=False):
     """ Load, decode and infer our example """
     
     # https://www.tensorflow.org/tutorials/load_data/tfrecord
@@ -281,9 +310,9 @@ def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir,
     for raw_record in raw_dataset.take(1):
         example = raw_record # we decode_example in infer()
 
-    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out, bitmap_depth)
+    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out, bitmap_depth, bitmap_fill)
 
-def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8):
+def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_fill=False):
     """Decodes one example of each class, conditioned on the example."""
 
     # initialize with t2t data
@@ -323,57 +352,156 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bit
     output_batch = output_batch['outputs'] if out == 'svg' else output_batch[0]
 
     out_list = []    
-    for output in tf.split(output_batch, num_classes):
+    for i, output in enumerate(tf.split(output_batch, num_classes)):
         if out == 'svg':
             out_list.append(svg_render(output))
+        elif out == 'img':
+            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, fill=bitmap_fill))
         else:
-            out_list.append(bitmap_render(output, bitmap_depth))
-
+            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, fill=bitmap_fill, render_html=False))
+            
     return out_list
 
 ##########################################################################################
 # Bitmap
 ##########################################################################################
 
-def bitmap_render(tensor, depth=8, adj_val=0.33):
+def bitmap_render(tensor, glyph='0', depth=8, fill=False, render_html=True):
     """Converts Image VAE output into HTML svg."""
-    # create a temporary file
     
-    tempbitmapfile = tempfile.NamedTemporaryFile(mode='w', suffix='.png', delete=False)
-    tempbitmapfile.close()
-    tempbitmappath = Path(tempbitmapfile.name)
-
-    # save our image -- adapted from matplotlib code below:
+    # depth is not 1 we don't fill
+    
+    if not depth == 1:
+        fill=False 
+    
+    # adapted from matplotlib code below:
     # imsave(tempbitmappath, np.reshape(tensor, [64, 64]), vmin=0, vmax=1, cmap='gray_r')
 
     arr = np.reshape(tensor, [64, 64])
     arr = np.clip(arr, 0, 1)
-    if depth == 1:
-        # apply adj_scalar then convert to 1 bit
-        arr = arr + adj_val
-        arr = np.around(arr)
         
-    arr = 255 - ((arr * 255).round().astype(np.uint8))
+    arr = (arr * 255).round().astype(np.uint8)
  
     image = PIL.Image.fromarray(arr, "L")
+    image = PIL.ImageOps.invert(image)
+    enhancer = PIL.ImageEnhance.Contrast(image)
+    image = enhancer.enhance(5)
+
+    # other options for enhancement
     
-    image.save(tempbitmappath, format="png")
+    # image = PIL.ImageOps.autocontrast(image, cutoff=0, ignore=255)
+
+    # enhancer = PIL.ImageEnhance.Sharpness(image)
+    # image = enhancer.enhance(20)
+
+    if depth == 1:
+        # we can set this to darken (max should be < 0.5)
+        darken = 0
+    
+        arr = (np.array(image).astype(np.float64)) / 255.0
+        arr = arr - darken
+        arr = np.around(arr)
+        arr = (arr * 255).round().astype(np.uint8)
+        image = PIL.Image.fromarray(arr, "L")
+
+    # this is a stopgap -- we shouldn't be having to fill in our glyphs
+    
+#     if fill:
+#         mask = image.copy()
+#         image = image.convert("RGB")
+#         
+#         # fill black
+#         ImageDraw.floodfill(mask, xy=(0, 0), value=0)
+#     
+#         if glyph in glyphMaxVoids:
+#             pass
+#         else:
+#             # we don't expect any voids, just add our mask
+#             image.paste((0, 0, 0), (0, 0), mask)
+    
+    if render_html:
+        # create a temporary file
+
+        tempbitmapfile = tempfile.NamedTemporaryFile(mode='w', suffix='.png', delete=False)
+        tempbitmapfile.close()
+        tempbitmappath = Path(tempbitmapfile.name)
+
+        image.save(tempbitmappath, format="png")
         
-    # load back and convert to html
+        # load back and convert to html
     
-    data_uri = base64.b64encode(tempbitmappath.read_bytes()).decode('utf-8')
-    html = '<img src="data:image/png;base64,{0}">'.format(data_uri)
+        data_uri = base64.b64encode(tempbitmappath.read_bytes()).decode('utf-8')
+        html = '<img src="data:image/png;base64,{0}">'.format(data_uri)
     
-    # remove our temporary file
+        # remove our temporary file
     
-    tempbitmappath.unlink()
+        tempbitmappath.unlink()
 
-    return html
-
+        return html
+    else:
+        return image
+        
 ##########################################################################################
 # SVG
 ##########################################################################################
   
+def clean_and_center_svg(svg, glyph='', ymin=None, ymax=None, tag='path', flipv=False):
+    # extract the first svg glyph path and bbox
+        
+    svg_tree = soup(svg, 'lxml')
+    svg_tag = svg_tree.find(tag)
+    
+    path_obj = parse_path(svg_tag['d'])
+    xmin, xmax, nymin, nymax = path_obj.bbox()
+    
+    ymin = min(ymin, nymin) if ymin is not None else nymin
+    ymax = max(ymax, nymax) if ymax is not None else nymax
+    
+    print(f'{glyph}: {xmin}, {xmax}, {ymin}, {ymax}')
+    
+    svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    
+    if flipv:
+        svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
+    else:
+        svg_path = f'<path d="{path_obj.d()}" />'    
+    
+    return f'{svg_start_inputs}{svg_path}</svg>'
+
+# Alternative: 
+
+# Precompute ymin / ymax
+
+def get_svg_path_ymin_ymax(svg, ymin=None, ymax=None, tag='path'):
+    # extract the first svg glyph path and bbox
+        
+    svg_tree = soup(svg, 'lxml')
+    svg_tag = svg_tree.find(tag)
+    
+    path_obj = parse_path(svg_tag['d'])
+    xmin, xmax, nymin, nymax = path_obj.bbox()
+    
+    ymin = min(ymin, nymin) if ymin is not None else nymin
+    ymax = max(ymax, nymax) if ymax is not None else nymax
+    
+    return (path_obj, ymin, ymax)
+
+# Center based on min ymin / max ymax
+
+def compose_svg(path_obj, ymin=None, ymax=None, flipv=False):
+    xmin, xmax, _, _ = path_obj.bbox()
+
+    svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    
+    if flipv:
+        svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
+    else:
+        svg_path = f'<path d="{path_obj.d()}" />'    
+    
+    return f'{svg_start_inputs}{svg_path}</svg>'   
+
+##########################################################################################
+
 svg_start = ("""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www."""
          """w3.org/1999/xlink" width="256px" height="256px" style="-ms-trans"""
          """form: rotate(360deg); -webkit-transform: rotate(360deg); transfo"""
@@ -560,7 +688,7 @@ def test_font_glyph_inference(fontname, glyph, inputt2tpath):
     modelbasepath = basepath/'models-google'
     modelsuffix = '_external'
     
-    uni = str(ord(glyph))
+    uni = ord(glyph)
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
     hparam_set = 'svg_decoder'
@@ -616,26 +744,6 @@ def index():
 
 ##########################################################################################    
 
-def clean_and_center_svg(svg, tag='path', flipv=False):
-    # extract the first svg glyph path and bbox
-        
-    svg_tree = soup(svg, 'lxml')
-    svg_tag = svg_tree.find(tag)
-    
-    path_obj = parse_path(svg_tag['d'])
-    xmin, xmax, ymin, ymax = path_obj.bbox()
-    
-    svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
-    
-    if flipv:
-        svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
-    else:
-        svg_path = f'<path d="{path_obj.d()}" />'    
-    
-    return f'{svg_start_inputs}{svg_path}</svg>'
-
-##########################################################################################    
-
 @app.route('/api/fonts')
 def get_fonts():
 
@@ -656,10 +764,16 @@ def get_inputs(fontname):
     glyphspath = inferencepath/fontname/'input'/'glyphs'
     glyphpaths = glyphspath.glob('*.sfd')
 
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}', end='')
-
     inputs = {}
 
+    ymin = None
+    ymax = None
+
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}Getting {fontname} inputs as SVGs...{bcolors.ENDC}', end='')
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
+    
+    # preprocess -- get ymin / ymax
+    
     for glyphindex, glyphpath in enumerate(glyphpaths):
         uni = int(glyphpath.with_suffix('').name)
 
@@ -673,13 +787,18 @@ def get_inputs(fontname):
         f.generate(tempsvgfile.name)
         
         svg = Path(tempsvgfile.name).read_text()
-        inputs[chr(uni)] = clean_and_center_svg(svg, tag='glyph', flipv=True)
+        
+        path_obj, ymin, ymax = get_svg_path_ymin_ymax(svg, ymin=ymin, ymax=ymax, tag='glyph')
+        inputs[chr(uni)] = path_obj
         
         Path(tempsvgfile.name).unlink()
         f.close()
-        
-    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
 
+    # compose
+
+    for i, (key, value) in enumerate(inputs.items()):
+        inputs[key] = compose_svg(inputs[key], ymin=ymin, ymax=ymax, flipv=True)
+        
     if not use_json:
         return '\n'.join(inputs.values())
 
@@ -687,13 +806,116 @@ def get_inputs(fontname):
 
 ##########################################################################################    
 
+@app.route('/api/infer/autotrace/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
+def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
+    # sample: 
+    # http://127.0.0.1:5959/api/infer/bitmap/models-google/external/Unica/A?json=False
+        
+    use_json = request.args.get('json', default='true').lower() == 'true'
+    bitmap_depth = 1 # bitmap_depth is always 1
+    bitmap_fill = True # always fill outlines
+
+    modelbasepath = basepath/modelname
+    modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
+
+    inputpath = inferencepath/fontname/'input'
+    inputt2tpath = inputpath/'t2t'
+
+    uni = ord(glyph)
+    glyphpath = inputt2tpath/f'{fontname}-{uni}'
+    
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}autotrace/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json})...{bcolors.ENDC}', end='')
+   
+    hparam_set = 'image_vae'
+    add_hparams = ''
+                   
+    model_name = 'image_vae'
+    ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
+
+    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="PIL_image", bitmap_depth=bitmap_depth, bitmap_fill=bitmap_fill)
+    
+    print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
+    
+    inferences = {}
+
+    ymin = None
+    ymax = None
+    
+    # zip up our autotraced inferences with our glyphs
+    # preprocess -- get ymin / ymax
+
+    for i, image in enumerate(inf):
+        glyph = glyphs[i]
+        
+        # save to bmp 
+        
+        tempbitmapfile = tempfile.NamedTemporaryFile(mode='w', suffix='.png', delete=False)
+        tempsvgfile = tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False)
+
+        tempbitmapfile.close()
+        tempsvgfile.close()
+        
+        tempbitmappath = Path(tempbitmapfile.name)
+        tempsvgpath = Path(tempsvgfile.name)
+
+        image.save(tempbitmappath, format="png")
+        
+        # create a new sfd
+        
+        vwidth = font_height
+    
+        f = fontforge.open('./blank.sfd')
+        f.ascent = font_ascent
+        f.descent = font_height - font_ascent
+
+        # paste in the bitmap and autotrace
+        
+        char = f.createChar(uni)
+        char.importOutlines(tempbitmapfile.name)
+        char.autoTrace()
+        char.vwidth = vwidth
+    
+        f.selection.all()
+        f.autoWidth(100, 30)
+        f.autoHint()
+
+        # save to svg
+    
+        f.generate(tempsvgfile.name)
+        f.close()
+    
+        # read svg back in, clean and center
+    
+        svg = tempsvgpath.read_text()
+        
+        path_obj, ymin, ymax = get_svg_path_ymin_ymax(svg, ymin=ymin, ymax=ymax, tag='glyph')
+        inferences[glyph] = path_obj
+        
+        # cleanup
+                
+        tempbitmappath.unlink()
+        tempsvgpath.unlink()
+
+    # compose
+
+    for i, (key, value) in enumerate(inferences.items()):
+        inferences[key] = compose_svg(inferences[key], ymin=ymin, ymax=ymax, flipv=True)
+       
+    if not use_json:
+        return '\n'.join(inferences.values())
+    
+    return jsonify({'inferences': inferences})
+
+##########################################################################################    
+
 @app.route('/api/infer/bitmap/<string:modelname>/<string:modelsuffix>/<string:fontname>/<string:glyph>', methods=['GET'])
-def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
+def infer_bitmap_from_font(modelname, modelsuffix, fontname, glyph):
     # sample: 
     # http://127.0.0.1:5959/api/infer/bitmap/models-google/external/Unica/A?json=False
         
     use_json = request.args.get('json', default='true').lower() == 'true'
     bitmap_depth = int(request.args.get('depth', default='8'))
+    bitmap_fill = request.args.get('fill', default='true').lower() == 'true'
 
     modelbasepath = basepath/modelname
     modelsuffix = '' if modelsuffix == '-' else f'_{modelsuffix}'
@@ -704,7 +926,7 @@ def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_depth: {bitmap_depth}-bit)...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_depth: {bitmap_depth}-bit, bitmap_fill: {bitmap_fill})...{bcolors.ENDC}', end='')
    
     hparam_set = 'image_vae'
     add_hparams = ''
@@ -712,17 +934,17 @@ def infer_bmp_from_font(modelname, modelsuffix, fontname, glyph):
     model_name = 'image_vae'
     ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
 
-    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="bitmap", bitmap_depth=bitmap_depth)
+    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="img", bitmap_depth=bitmap_depth, bitmap_fill=bitmap_fill)
     
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
     inferences = {}
     
-    # clean our svg, zip up our inferences with our glyphs
+    # zip up our bitmap inferences with our glyphs
 
-    for i, bitmap in enumerate(inf):
+    for i, img in enumerate(inf):
         glyph = glyphs[i]
-        inferences[glyph] = bitmap
+        inferences[glyph] = img
         
     if not use_json:
         return '\n'.join(inferences.values())
@@ -744,7 +966,7 @@ def infer_svg_from_font(modelname, modelsuffix, fontname, glyph):
     inputpath = inferencepath/fontname/'input'
     inputt2tpath = inputpath/'t2t'
 
-    uni = str(ord(glyph))
+    uni = ord(glyph)
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
     print(f'{datetime.datetime.now()}: {bcolors.BOLD}svg/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json})...{bcolors.ENDC}', end='')
@@ -761,12 +983,23 @@ def infer_svg_from_font(modelname, modelsuffix, fontname, glyph):
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
     inferences = {}
+
+    ymin = None
+    ymax = None
     
     # clean our svg, zip up our inferences with our glyphs
+    # preprocess -- get ymin / ymax
 
     for i, svg in enumerate(inf):
         glyph = glyphs[i]
-        inferences[glyph] = clean_and_center_svg(svg)
+
+        path_obj, ymin, ymax = get_svg_path_ymin_ymax(svg, ymin=ymin, ymax=ymax)
+        inferences[glyph] = path_obj
+
+    # compose
+
+    for i, (key, value) in enumerate(inferences.items()):
+        inferences[key] = compose_svg(inferences[key], ymin=ymin, ymax=ymax)
         
     if not use_json:
         return '\n'.join(inferences.values())
@@ -817,16 +1050,28 @@ def infer_svg_from_svg(modelname, modelsuffix, glyph):
     ckpt_dir = os.fspath(modelbasepath/f'svg_decoder{modelsuffix}')
 
     inf = infer(example, hparam_set, add_hparams, model_name, ckpt_dir)
-    inferences = {}
     
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
-    
+
+    inferences = {}
+
+    ymin = None
+    ymax = None
+        
     # clean our svg, zip up our inferences with our glyphs
+    # preprocess -- get ymin / ymax
 
     for i, svg in enumerate(inf):
         glyph = glyphs[i]
-        inferences[glyph] = clean_and_center_svg(svg)
+
+        path_obj, ymin, ymax = get_svg_path_ymin_ymax(svg, ymin=ymin, ymax=ymax)
+        inferences[glyph] = path_obj
         
+    # compose
+
+    for i, (key, value) in enumerate(inferences.items()):
+        inferences[key] = compose_svg(inferences[key], ymin=ymin, ymax=ymax)
+
     if not use_json:
         return '\n'.join(inferences.values())
     
