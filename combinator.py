@@ -477,12 +477,17 @@ def get_svg_path_ymin_ymax(svg, ymin=None, ymax=None, tag='path'):
         
     svg_tree = soup(svg, 'lxml')
     svg_tag = svg_tree.find(tag)
-    print("TEST", svg_tag)
-    path_obj = parse_path(svg_tag['d'])
-    xmin, xmax, nymin, nymax = path_obj.bbox()
+
+    path_obj = None
+
+    try:
+        path_obj = parse_path(svg_tag['d'])
+        xmin, xmax, nymin, nymax = path_obj.bbox()
     
-    ymin = min(ymin, nymin) if ymin is not None else nymin
-    ymax = max(ymax, nymax) if ymax is not None else nymax
+        ymin = min(ymin, nymin) if ymin is not None else nymin
+        ymax = max(ymax, nymax) if ymax is not None else nymax
+    except KeyError as error:
+        print(f'{datetime.datetime.now()}: {bcolors.FAIL}Unable to parse SVG tag "{tag}" ({svg_tag}): {error}{bcolors.ENDC}')
     
     return (path_obj, ymin, ymax)
 
