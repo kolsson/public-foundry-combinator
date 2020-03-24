@@ -486,8 +486,8 @@ def get_svg_path_ymin_ymax(svg, ymin=None, ymax=None, tag='path'):
     
         ymin = min(ymin, nymin) if ymin is not None else nymin
         ymax = max(ymax, nymax) if ymax is not None else nymax
-    except KeyError as error:
-        print(f'{datetime.datetime.now()}: {bcolors.FAIL}Unable to parse SVG tag "{tag}" ({svg_tag}): {error}{bcolors.ENDC}')
+    except KeyError:
+        print(f'{datetime.datetime.now()}: {bcolors.FAIL}Unable to parse SVG tag "{tag}" ({svg_tag}){bcolors.ENDC}')
     
     return (path_obj, ymin, ymax)
 
@@ -875,7 +875,7 @@ def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
 
         # paste in the bitmap and autotrace
         
-        char = f.createChar(uni)
+        char = f.createChar(ord(glyph))
         char.importOutlines(tempbitmapfile.name)
         char.autoTrace()
         char.vwidth = vwidth
