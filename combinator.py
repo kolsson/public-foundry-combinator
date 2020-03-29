@@ -301,7 +301,7 @@ def preprocess_example(example, hparams):
     # we pass by reference so example is modified even if we don't return
     return example    
 
-def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_fill=False):
+def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_contrast=1, bitmap_fill=False):
     """ Load, decode and infer our example """
     
     # https://www.tensorflow.org/tutorials/load_data/tfrecord
@@ -310,9 +310,9 @@ def infer_from_file(example_file, hparam_set, add_hparams, model_name, ckpt_dir,
     for raw_record in raw_dataset.take(1):
         example = raw_record # we decode_example in infer()
 
-    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out, bitmap_depth, bitmap_fill)
+    return infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out, bitmap_depth, bitmap_contrast, bitmap_fill)
 
-def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_fill=False):
+def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bitmap_depth=8, bitmap_contrast=1, bitmap_fill=False):
     """Decodes one example of each class, conditioned on the example."""
 
     # initialize with t2t data
@@ -356,9 +356,9 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bit
         if out == 'svg':
             out_list.append(svg_render(output))
         elif out == 'img':
-            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, fill=bitmap_fill))
+            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, contrast=bitmap_contrast, fill=bitmap_fill))
         else:
-            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, fill=bitmap_fill, render_html=False))
+            out_list.append(bitmap_render(output, glyph=glyphs[i], depth=bitmap_depth, contrast=bitmap_contrast, fill=bitmap_fill, render_html=False))
             
     return out_list
 
@@ -366,7 +366,7 @@ def infer(example, hparam_set, add_hparams, model_name, ckpt_dir, out='svg', bit
 # Bitmap
 ##########################################################################################
 
-def bitmap_render(tensor, glyph='0', depth=8, fill=False, render_html=True):
+def bitmap_render(tensor, glyph='0', depth=8, contrast=1, fill=False, render_html=True):
     """Converts Image VAE output into HTML svg."""
     
     # depth is not 1 we don't fill
@@ -384,12 +384,17 @@ def bitmap_render(tensor, glyph='0', depth=8, fill=False, render_html=True):
  
     image = PIL.Image.fromarray(arr, "L")
     image = PIL.ImageOps.invert(image)
-    enhancer = PIL.ImageEnhance.Contrast(image)
-    image = enhancer.enhance(5)
-
-    # other options for enhancement
     
-    # image = PIL.ImageOps.autocontrast(image, cutoff=0, ignore=255)
+    if isinstance(contrast, (int, float)):
+        if contrast is not 1:
+            # 1 = no change
+            
+            enhancer = PIL.ImageEnhance.Contrast(image)
+            image = enhancer.enhance(contrast)    
+    elif contrast == "auto":
+        image = PIL.ImageOps.autocontrast(image, cutoff=0, ignore=255)  
+
+    # another option for enhancement
 
     # enhancer = PIL.ImageEnhance.Sharpness(image)
     # image = enhancer.enhance(20)
@@ -818,6 +823,13 @@ def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
         
     use_json = request.args.get('json', default='true').lower() == 'true'
     bitmap_depth = 1 # bitmap_depth is always 1
+    bitmap_contrast = request.args.get('contrast', default='auto')
+    
+    try:
+        bitmap_contrast = float(bitmap_contrast)
+    except ValueError:
+        bitmap_contrast = "auto"
+
     bitmap_fill = True # always fill outlines
 
     modelbasepath = basepath/modelname
@@ -829,7 +841,7 @@ def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
     uni = ord(glyph)
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}autotrace/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}autotrace/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_contrast: {bitmap_contrast})...{bcolors.ENDC}', end='')
    
     hparam_set = 'image_vae'
     add_hparams = ''
@@ -837,7 +849,17 @@ def infer_autotrace_from_font(modelname, modelsuffix, fontname, glyph):
     model_name = 'image_vae'
     ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
 
-    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="PIL_image", bitmap_depth=bitmap_depth, bitmap_fill=bitmap_fill)
+    inf = infer_from_file(
+        glyphpath, 
+        hparam_set, 
+        add_hparams, 
+        model_name, 
+        ckpt_dir, 
+        out="PIL_image", 
+        bitmap_depth=bitmap_depth, 
+        bitmap_contrast=bitmap_contrast, 
+        bitmap_fill=bitmap_fill
+    )
     
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
@@ -920,6 +942,13 @@ def infer_bitmap_from_font(modelname, modelsuffix, fontname, glyph):
         
     use_json = request.args.get('json', default='true').lower() == 'true'
     bitmap_depth = int(request.args.get('depth', default='8'))
+    bitmap_contrast = request.args.get('contrast', default='auto')
+    
+    try:
+        bitmap_contrast = float(bitmap_contrast)
+    except ValueError:
+        bitmap_contrast = "auto"
+    
     bitmap_fill = request.args.get('fill', default='true').lower() == 'true'
 
     modelbasepath = basepath/modelname
@@ -931,7 +960,7 @@ def infer_bitmap_from_font(modelname, modelsuffix, fontname, glyph):
     uni = str(ord(glyph))
     glyphpath = inputt2tpath/f'{fontname}-{uni}'
     
-    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_depth: {bitmap_depth}-bit, bitmap_fill: {bitmap_fill})...{bcolors.ENDC}', end='')
+    print(f'{datetime.datetime.now()}: {bcolors.BOLD}bitmap/{fontname} "{glyph}" inference using {modelname}{modelsuffix} (use_json: {use_json}, bitmap_depth: {bitmap_depth}-bit, bitmap_contrast: {bitmap_contrast}, bitmap_fill: {bitmap_fill})...{bcolors.ENDC}', end='')
    
     hparam_set = 'image_vae'
     add_hparams = ''
@@ -939,7 +968,17 @@ def infer_bitmap_from_font(modelname, modelsuffix, fontname, glyph):
     model_name = 'image_vae'
     ckpt_dir = os.fspath(modelbasepath/f'image_vae{modelsuffix}')
 
-    inf = infer_from_file(glyphpath, hparam_set, add_hparams, model_name, ckpt_dir, out="img", bitmap_depth=bitmap_depth, bitmap_fill=bitmap_fill)
+    inf = infer_from_file(
+        glyphpath, 
+        hparam_set, 
+        add_hparams, 
+        model_name, 
+        ckpt_dir, 
+        out="img", 
+        bitmap_depth=bitmap_depth, 
+        bitmap_contrast=bitmap_contrast, 
+        bitmap_fill=bitmap_fill
+    )
     
     print(f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}')
     
