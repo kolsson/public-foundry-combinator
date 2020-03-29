@@ -499,16 +499,23 @@ def get_svg_path_ymin_ymax(svg, ymin=None, ymax=None, tag='path'):
 # Center based on min ymin / max ymax
 
 def compose_svg(path_obj, ymin=None, ymax=None, flipv=False):
-    xmin, xmax, _, _ = path_obj.bbox()
+    svg_start_inputs = f'<svg width="50px" height="50px" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    svg_path = ''
 
-    svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
+    try:
+        xmin, xmax, _, _ = path_obj.bbox()
+        svg_start_inputs = f'<svg width="50px" height="50px" viewBox="{xmin} {ymin} {xmax-xmin} {ymax-ymin}" version="1.1" xmlns="http://www.w3.org/2000/svg">'
     
-    if flipv:
-        svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
-    else:
-        svg_path = f'<path d="{path_obj.d()}" />'    
-    
-    return f'{svg_start_inputs}{svg_path}</svg>'   
+        if flipv:
+            svg_path = f'<path transform="scale(1, -1) translate(0, -{ymax+ymin})" d="{path_obj.d()}" />'
+        else:
+            svg_path = f'<path d="{path_obj.d()}" />'
+        
+    except AttributeError:
+        # this happens when autotrace fails -- but we want to be notified of other errors
+        pass
+        
+    return f'{svg_start_inputs}{svg_path}</svg>'
 
 ##########################################################################################
 
