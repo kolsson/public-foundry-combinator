@@ -8,7 +8,7 @@
 
 The Public Foundry Combinator was built to test different machine learning models for font generation. This version was built specifically to work with Google's SVG-VAE model architecture: [SVG VAE: Generating Scalable Vector Graphics Typography](https://magenta.tensorflow.org/svg-vae)
 
-The Combinator comprises a Flask-based server component and React-based [client](https://github.com/kolsson/public-foundry-combinator-ui) component.
+The Combinator comprises a Flask-based [server](https://github.com/kolsson/public-foundry-combinator) component and React-based [client](https://github.com/kolsson/public-foundry-combinator-ui) component.
 
 To begin, the user selects a model and a preprocessed font to use for inference. Next, the user can adjust the output format: SVG, inferred using the SVG decoder; Bitmap, inferred using the VAE; and Bitmap to SVG, inferred using the VAE and then postprocessed with potrace to create SVG glyphs. For the latter two output options bitmap depth and / or bitmap contrast can also be adjusted.
 
