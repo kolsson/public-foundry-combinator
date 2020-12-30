@@ -78,7 +78,7 @@ To start the server locally:
 gunicorn --bind 0.0.0.0:5000 wsgi:app
 ```
 
-The API endpoints documented in the source code can be accessed directly, but the server is most useful when used in concert with the UI [client](https://github.com/kolsson/public-foundry-combinator-ui)
+The API endpoints documented in the source code can be accessed directly, but the server is most useful when used in concert with the UI [client](https://github.com/kolsson/public-foundry-combinator-ui).
 
 ## License
 
